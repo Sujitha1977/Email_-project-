@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Email Priority Classifier</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.4.0/axios.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+        
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+        
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            padding: 30px;
+        }
+        
+        .input-section {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 15px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .input-group {
+            margin-bottom: 20px;
+        }
+        
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .input-group input,
+        .input-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+        
+        .input-group input:focus,
+        .input-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .input-group textarea {
+            resize: vertical;
+            min-height: 120px;
+        }
+        
+        .classify-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+        
+        .classify-btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .classify-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .results-section {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 15px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .result-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-left: 5px solid #667eea;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+        
+        .priority-badge {
+            display: inline-block;
+            padding: 6px 15px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin-bottom: 10px;
+        }
+        
+        .priority-urgent {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .priority-important {
+            background: #fd7e14;
+            color: white;
+        }
+        
+        .priority-normal {
+            background: #28a745;
+            color: white;
+        }
+        
+        .priority-spam {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .confidence-bar {
+            width: 100%;
+            height: 8px;
+            background: #e9ecef;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+        
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            transition: width 0.5s ease;
+        }
+        
+        .email-history {
+            margin-top: 30px;
+            padding: 25px;
+            background: #f8f9fa;
+            border-radius: 15px;
+        }
+        
+        .history-item {
+            background: white;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+        
+        .stat-number {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #667eea;
+        }
+        
+        .stat-label {
+            color: #6c757d;
+            font-size: 0.9rem;
+            margin-top: 5px;
+        }
+        
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 AI Email Priority Classifier</h1>
+            <p>Intelligent email classification using Natural Language Processing</p>
+        </div>
+        
+        <div class="main-content">
+            <div class="input-section">
+                <h3 style="margin-bottom: 20px; color: #495057;">📧 Email Input</h3>
+                
+                <div class="input-group">
+                    <label for="sender">Sender Email</label>
+                    <input type="email" id="sender" placeholder="sender@example.com">
+                </div>
+                
+                <div class="input-group">
+                    <label for="subject">Subject Line</label>
+                    <input type="text" id="subject" placeholder="Enter email subject">
+                </div>
+                
+                <div class="input-group">
+                    <label for="body">Email Body</label>
+                    <textarea id="body" placeholder="Enter email content here..."></textarea>
+                </div>
+                
+                <button class="classify-btn" onclick="classifyEmail()">
+                    🔍 Classify Email Priority
+                </button>
+                
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <p>Processing email...</p>
+                </div>
+            </div>
+            
+            <div class="results-section">
+                <h3 style="margin-bottom: 20px; color: #495057;">📊 Classification Results</h3>
+                
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-number" id="totalProcessed">0</div>
+                        <div class="stat-label">Total Processed</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="avgConfidence">0%</div>
+                        <div class="stat-label">Avg Confidence</div>
+                    </div>
+                </div>
+                
+                <div id="results">
+                    <div style="text-align: center; color: #6c757d; padding: 40px;">
+                        <div style="font-size: 3rem; margin-bottom: 10px;">📬</div>
+                        <p>Enter an email above to see classification results</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="email-history">
+            <h3 style="margin-bottom: 20px; color: #495057;">📜 Recent Classifications</h3>
+            <div id="history">
+                <div style="text-align: center; color: #6c757d; padding: 20px;">
+                    No classifications yet
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Mock ML model and database functionality
+        class EmailClassifier {
+            constructor() {
+                this.model = this.initializeModel();
+                this.database = [];
+                this.stats = { total: 0, confidenceSum: 0 };
+            }
+            
+            initializeModel() {
+                // Simulate trained model with keyword-based classification
+                return {
+                    urgentKeywords: ['urgent', 'asap', 'emergency', 'critical', 'deadline', 'immediately', 'rush'],
+                    importantKeywords: ['meeting', 'important', 'review', 'approval', 'decision', 'project'],
+                    spamKeywords: ['lottery', 'winner', 'free', 'click here', 'buy now', 'limited time', 'offer', '$$$'],
+                    normalKeywords: ['hello', 'thanks', 'update', 'information', 'regarding']
+                };
+            }
+            
+            preprocessText(text) {
+                return text.toLowerCase().replace(/[^\w\s]/g, ' ').split(/\s+/);
+            }
+            
+            classifyEmail(sender, subject, body) {
+                const fullText = `${sender} ${subject} ${body}`;
+                const words = this.preprocessText(fullText);
+                
+                let scores = {
+                    urgent: 0,
+                    important: 0,
+                    spam: 0,
+                    normal: 0
+                };
+                
+                // Calculate scores based on keyword matches
+                words.forEach(word => {
+                    if (this.model.urgentKeywords.includes(word)) scores.urgent += 3;
+                    if (this.model.importantKeywords.includes(word)) scores.important += 2;
+                    if (this.model.spamKeywords.includes(word)) scores.spam += 4;
+                    if (this.model.normalKeywords.includes(word)) scores.normal += 1;
+                });
+                
+                // Additional heuristics
+                if (subject.includes('RE:') || subject.includes('FW:')) scores.normal += 1;
+                if (body.length > 500) scores.important += 1;
+                if (sender.includes('noreply') || sender.includes('no-reply')) scores.spam += 2;
+                
+                // Determine priority
+                const maxScore = Math.max(...Object.values(scores));
+                const priority = Object.keys(scores).find(key => scores[key] === maxScore) || 'normal';
+                
+                // Calculate confidence (0-100%)
+                const totalScore = Object.values(scores).reduce((a, b) => a + b, 0);
+                const confidence = totalScore > 0 ? Math.min(95, (maxScore / totalScore * 100)) : 60;
+                
+                return {
+                    priority: priority,
+                    confidence: Math.round(confidence),
+                    scores: scores,
+                    timestamp: new Date().toISOString()
+                };
+            }
+            
+            storeEmail(emailData) {
+                const email = {
+                    id: this.database.length + 1,
+                    ...emailData,
+                    processed_at: new Date().toISOString()
+                };
+                this.database.push(email);
+                
+                // Update stats
+                this.stats.total++;
+                this.stats.confidenceSum += emailData.result.confidence;
+                
+                return email;
+            }
+            
+            getHistory() {
+                return this.database.slice(-10).reverse(); // Last 10 emails
+            }
+            
+            getStats() {
+                return {
+                    total: this.stats.total,
+                    avgConfidence: this.stats.total > 0 ? Math.round(this.stats.confidenceSum / this.stats.total) : 0
+                };
+            }
+        }
+        
+        // Initialize classifier
+        const classifier = new EmailClassifier();
+        
+        // Sample data for demonstration
+        const sampleEmails = [
+            { sender: "boss@company.com", subject: "Urgent: Board Meeting Tomorrow", body: "We need to prepare the quarterly report ASAP for the emergency board meeting.", result: { priority: "urgent", confidence: 89 }},
+            { sender: "newsletter@spam.com", subject: "You've Won $1000000!!!", body: "Click here now to claim your free lottery winnings! Limited time offer!", result: { priority: "spam", confidence: 94 }},
+            { sender: "colleague@work.com", subject: "Project Update", body: "Here's the latest update on our project status. The meeting went well.", result: { priority: "normal", confidence: 72 }}
+        ];
+        
+        // Load sample data
+        sampleEmails.forEach(email => {
+            classifier.storeEmail(email);
+        });
+        
+        function updateStats() {
+            const stats = classifier.getStats();
+            document.getElementById('totalProcessed').textContent = stats.total;
+            document.getElementById('avgConfidence').textContent = stats.avgConfidence + '%';
+        }
+        
+        function updateHistory() {
+            const history = classifier.getHistory();
+            const historyDiv = document.getElementById('history');
+            
+            if (history.length === 0) {
+                historyDiv.innerHTML = '<div style="text-align: center; color: #6c757d; padding: 20px;">No classifications yet</div>';
+                return;
+            }
+            
+            historyDiv.innerHTML = history.map(email => `
+                <div class="history-item">
+                    <div>
+                        <strong>${email.subject}</strong><br>
+                        <small style="color: #6c757d;">${email.sender}</small>
+                    </div>
+                    <div>
+                        <span class="priority-badge priority-${email.result.priority}">${email.result.priority.toUpperCase()}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function displayResult(result, emailData) {
+            const resultsDiv = document.getElementById('results');
+            const priorityClass = `priority-${result.priority}`;
+            
+            resultsDiv.innerHTML = `
+                <div class="result-card">
+                    <div class="priority-badge ${priorityClass}">
+                        ${result.priority.toUpperCase()} PRIORITY
+                    </div>
+                    <h4 style="margin-bottom: 10px; color: #495057;">Classification Details</h4>
+                    <p><strong>Subject:</strong> ${emailData.subject}</p>
+                    <p><strong>Sender:</strong> ${emailData.sender}</p>
+                    <p><strong>Confidence:</strong> ${result.confidence}%</p>
+                    <div class="confidence-bar">
+                        <div class="confidence-fill" style="width: ${result.confidence}%"></div>
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <small><strong>Score Breakdown:</strong></small><br>
+                        <small>Urgent: ${result.scores.urgent} | Important: ${result.scores.important} | Spam: ${result.scores.spam} | Normal: ${result.scores.normal}</small>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function classifyEmail() {
+            const sender = document.getElementById('sender').value.trim();
+            const subject = document.getElementById('subject').value.trim();
+            const body = document.getElementById('body').value.trim();
+            
+            if (!sender || !subject || !body) {
+                alert('Please fill in all fields');
+                return;
+            }
+            
+            // Show loading
+            document.getElementById('loading').style.display = 'block';
+            document.querySelector('.classify-btn').disabled = true;
+            
+            // Simulate API call delay
+            setTimeout(() => {
+                const result = classifier.classifyEmail(sender, subject, body);
+                const emailData = { sender, subject, body, result };
+                
+                // Store in database
+                classifier.storeEmail(emailData);
+                
+                // Update UI
+                displayResult(result, emailData);
+                updateStats();
+                updateHistory();
+                
+                // Hide loading
+                document.getElementById('loading').style.display = 'none';
+                document.querySelector('.classify-btn').disabled = false;
+            }, 1500);
+        }
+        
+        // Load sample data on page load
+        function loadSampleEmail() {
+            const samples = [
+                {
+                    sender: "support@bank.com",
+                    subject: "URGENT: Suspicious Activity Detected",
+                    body: "We detected unusual activity on your account. Please verify your identity immediately by clicking the link below."
+                },
+                {
+                    sender: "newsletter@tech.com", 
+                    subject: "Weekly Tech Newsletter",
+                    body: "Hello! Here's your weekly roundup of the latest technology news and updates from our team."
+                },
+                {
+                    sender: "promo@deals.com",
+                    subject: "🎉 MEGA SALE! 90% OFF Everything!",
+                    body: "LIMITED TIME ONLY! Click here to claim your exclusive discount. Buy now before this amazing offer expires!"
+                }
+            ];
+            
+            const sample = samples[Math.floor(Math.random() * samples.length)];
+            document.getElementById('sender').value = sample.sender;
+            document.getElementById('subject').value = sample.subject;
+            document.getElementById('body').value = sample.body;
+        }
+        
+        // Initialize page
+        updateStats();
+        updateHistory();
+        
+        // Add sample email button
+        document.querySelector('.input-section h3').innerHTML += ' <button onclick="loadSampleEmail()" style="background: #28a745; color: white; border: none; padding: 5px 10px; border-radius: 5px; font-size: 0.8rem; cursor: pointer; margin-left: 10px;">Load Sample</button>';
+    </script>
+</body>
+</html>

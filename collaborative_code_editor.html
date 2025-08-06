@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CodeCollab - Real-Time Code Editor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.22.5/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-clike.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-java.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-css.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markup.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            background: #0d1117;
+            color: #e6edf3;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        .app-container {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: white;
+        }
+        
+        .logo-icon {
+            margin-right: 10px;
+            font-size: 1.8rem;
+        }
+        
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .language-select {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+        
+        .user-info {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .user-avatar {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #ff6b6b, #ffd93d);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .main-content {
+            flex: 1;
+            display: flex;
+            position: relative;
+        }
+        
+        .sidebar {
+            width: 280px;
+            background: #161b22;
+            border-right: 1px solid #30363d;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.3s ease;
+        }
+        
+        .sidebar.collapsed {
+            transform: translateX(-100%);
+        }
+        
+        .sidebar-header {
+            padding: 15px;
+            border-bottom: 1px solid #30363d;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .sidebar-title {
+            font-weight: 600;
+            color: #f0f6fc;
+        }
+        
+        .toggle-sidebar {
+            background: none;
+            border: none;
+            color: #8b949e;
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 4px;
+            transition: color 0.2s;
+        }
+        
+        .toggle-sidebar:hover {
+            color: #f0f6fc;
+        }
+        
+        .online-users {
+            padding: 15px;
+            flex: 1;
+            overflow-y: auto;
+        }
+        
+        .user-list {
+            list-style: none;
+        }
+        
+        .user-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 0;
+            color: #8b949e;
+            font-size: 0.9rem;
+        }
+        
+        .user-item.active {
+            color: #58a6ff;
+        }
+        
+        .user-status {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #238636;
+        }
+        
+        .user-cursor-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            margin-left: auto;
+        }
+        
+        .editor-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        
+        .editor-toolbar {
+            background: #21262d;
+            padding: 10px 15px;
+            border-bottom: 1px solid #30363d;
+            display: flex;
+            justify-content: between;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .file-name {
+            font-size: 0.9rem;
+            color: #f0f6fc;
+            background: #30363d;
+            padding: 6px 12px;
+            border-radius: 4px;
+            min-width: 150px;
+        }
+        
+        .editor-stats {
+            margin-left: auto;
+            display: flex;
+            gap: 15px;
+            color: #8b949e;
+            font-size: 0.8rem;
+        }
+        
+        .code-editor {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .editor-textarea {
+            width: 100%;
+            height: 100%;
+            border: none;
+            outline: none;
+            background: transparent;
+            color: transparent;
+            caret-color: #58a6ff;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            padding: 20px;
+            resize: none;
+            z-index: 2;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        
+        .syntax-highlight {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            padding: 20px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            overflow: auto;
+            pointer-events: none;
+            white-space: pre;
+            word-wrap: break-word;
+            z-index: 1;
+        }
+        
+        .cursor-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 3;
+        }
+        
+        .remote-cursor {
+            position: absolute;
+            width: 2px;
+            height: 21px;
+            border-radius: 1px;
+            animation: blink 1s infinite;
+        }
+        
+        .remote-cursor::after {
+            content: attr(data-user);
+            position: absolute;
+            top: -25px;
+            left: 0;
+            background: inherit;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            white-space: nowrap;
+            transform: translateX(-50%);
+        }
+        
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+        
+        .status-bar {
+            background: #161b22;
+            padding: 8px 20px;
+            border-top: 1px solid #30363d;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.8rem;
+            color: #8b949e;
+        }
+        
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #238636;
+        }
+        
+        .status-indicator.disconnected {
+            background: #da3633;
+        }
+        
+        .login-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+        }
+        
+        .login-form {
+            background: #21262d;
+            padding: 40px;
+            border-radius: 12px;
+            border: 1px solid #30363d;
+            min-width: 400px;
+            text-align: center;
+        }
+        
+        .login-title {
+            font-size: 1.8rem;
+            margin-bottom: 10px;
+            color: #f0f6fc;
+        }
+        
+        .login-subtitle {
+            color: #8b949e;
+            margin-bottom: 30px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 5px;
+            color: #f0f6fc;
+            font-size: 0.9rem;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            background: #0d1117;
+            color: #f0f6fc;
+            font-size: 1rem;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: #58a6ff;
+            box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.1);
+        }
+        
+        .login-button {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .login-button:hover {
+            transform: translateY(-2px);
+        }
+        
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #238636;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 6px;
+            z-index: 3000;
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+        }
+        
+        .toast.show {
+            transform: translateX(0);
+        }
+        
+        .toast.error {
+            background: #da3633;
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                position: absolute;
+                left: 0;
+                top: 0;
+                height: 100%;
+                z-index: 100;
+            }
+            
+            .login-form {
+                margin: 20px;
+                min-width: unset;
+            }
+        }
+        
+        /* Prism.js override for dark theme */
+        .token.comment,
+        .token.prolog,
+        .token.doctype,
+        .token.cdata {
+            color: #8b949e;
+        }
+        
+        .token.punctuation {
+            color: #e6edf3;
+        }
+        
+        .token.property,
+        .token.tag,
+        .token.boolean,
+        .token.number,
+        .token.constant,
+        .token.symbol,
+        .token.deleted {
+            color: #79c0ff;
+        }
+        
+        .token.selector,
+        .token.attr-name,
+        .token.string,
+        .token.char,
+        .token.builtin,
+        .token.inserted {
+            color: #a5d6ff;
+        }
+        
+        .token.operator,
+        .token.entity,
+        .token.url,
+        .language-css .token.string,
+        .style .token.string {
+            color: #ff7b72;
+        }
+        
+        .token.atrule,
+        .token.attr-value,
+        .token.keyword {
+            color: #ff7b72;
+        }
+        
+        .token.function,
+        .token.class-name {
+            color: #d2a8ff;
+        }
+        
+        .token.regex,
+        .token.important,
+        .token.variable {
+            color: #ffa657;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback } = React;
+
+        // Mock Socket.io for demonstration
+        class MockSocket {
+            constructor() {
+                this.handlers = {};
+                this.connected = false;
+                this.id = Math.random().toString(36).substr(2, 9);
+                
+                // Simulate connection
+                setTimeout(() => {
+                    this.connected = true;
+                    this.emit('connect');
+                    
+                    // Simulate some users joining
+                    setTimeout(() => {
+                        this.emit('userJoined', {
+                            id: 'user1',
+                            name: 'Alice',
+                            avatar: 'A',
+                            cursorColor: '#ff6b6b'
+                        });
+                    }, 1000);
+                    
+                    setTimeout(() => {
+                        this.emit('userJoined', {
+                            id: 'user2', 
+                            name: 'Bob',
+                            avatar: 'B',
+                            cursorColor: '#4ecdc4'
+                        });
+                    }, 2000);
+                }, 500);
+            }
+            
+            on(event, handler) {
+                if (!this.handlers[event]) {
+                    this.handlers[event] = [];
+                }
+                this.handlers[event].push(handler);
+            }
+            
+            emit(event, data) {
+                if (this.handlers[event]) {
+                    this.handlers[event].forEach(handler => handler(data));
+                }
+                
+                // Simulate server responses
+                if (event === 'codeChange') {
+                    setTimeout(() => {
+                        this.emit('codeChanged', data);
+                    }, 50);
+                }
+                
+                if (event === 'cursorMove') {
+                    setTimeout(() => {
+                        this.emit('cursorMoved', data);
+                    }, 10);
+                }
+            }
+            
+            disconnect() {
+                this.connected = false;
+                this.emit('disconnect');
+            }
+        }
+
+        // Mock Authentication
+        const mockAuth = {
+            currentUser: null,
+            signIn: (email, password) => {
+                return new Promise((resolve) => {
+                    setTimeout(() => {
+                        mockAuth.currentUser = {
+                            uid: Math.random().toString(36).substr(2, 9),
+                            email: email,
+                            displayName: email.split('@')[0],
+                            photoURL: null
+                        };
+                        resolve(mockAuth.currentUser);
+                    }, 1000);
+                });
+            },
+            signOut: () => {
+                mockAuth.currentUser = null;
+            }
+        };
+
+        // Language configurations
+        const languages = {
+            javascript: { name: 'JavaScript', ext: 'js', grammar: 'javascript' },
+            python: { name: 'Python', ext: 'py', grammar: 'python' },
+            java: { name: 'Java', ext: 'java', grammar: 'java' },
+            css: { name: 'CSS', ext: 'css', grammar: 'css' },
+            html: { name: 'HTML', ext: 'html', grammar: 'markup' },
+            json: { name: 'JSON', ext: 'json', grammar: 'json' }
+        };
+
+        // Sample code templates
+        const codeTemplates = {
+            javascript: `// Welcome to CodeCollab!
+// Start coding together in real-time
+
+function fibonacci(n) {
+    if (n <= 1) return n;
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+console.log('Fibonacci sequence:');
+for (let i = 0; i < 10; i++) {
+    console.log(\`F(\${i}) = \${fibonacci(i)}\`);
+}`,
+            python: `# Welcome to CodeCollab!
+# Start coding together in real-time
+
+def fibonacci(n):
+    if n <= 1:
+        return n
+    return fibonacci(n - 1) + fibonacci(n - 2)
+
+print('Fibonacci sequence:')
+for i in range(10):
+    print(f'F({i}) = {fibonacci(i)}')`,
+            java: `// Welcome to CodeCollab!
+// Start coding together in real-time
+
+public class Fibonacci {
+    public static int fibonacci(int n) {
+        if (n <= 1) return n;
+        return fibonacci(n - 1) + fibonacci(n - 2);
+    }
+    
+    public static void main(String[] args) {
+        System.out.println("Fibonacci sequence:");
+        for (int i = 0; i < 10; i++) {
+            System.out.println("F(" + i + ") = " + fibonacci(i));
+        }
+    }
+}`
+        };
+
+        // Login Component
+        function LoginModal({ onLogin }) {
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            const [loading, setLoading] = useState(false);
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                if (!email || !password) return;
+                
+                setLoading(true);
+                try {
+                    const user = await mockAuth.signIn(email, password);
+                    onLogin(user);
+                } catch (error) {
+                    console.error('Login failed:', error);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            return (
+                <div className="login-modal">
+                    <form className="login-form" onSubmit={handleSubmit}>
+                        <h2 className="login-title">Welcome to CodeCollab</h2>
+                        <p className="login-subtitle">Sign in to start coding together</p>
+                        
+                        <div className="form-group">
+                            <label className="form-label">Email</label>
+                            <input
+                                type="email"
+                                className="form-input"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                placeholder="Enter your email"
+                                required
+                            />
+                        </div>
+                        
+                        <div className="form-group">
+                            <label className="form-label">Password</label>
+                            <input
+                                type="password"
+                                className="form-input"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder="Enter your password"
+                                required
+                            />
+                        </div>
+                        
+                        <button
+                            type="submit"
+                            className="login-button"
+                            disabled={loading}
+                        >
+                            {loading ? 'Signing in...' : 'Sign In'}
+                        </button>
+                    </form>
+                </div>
+            );
+        }
+
+        // Toast Component
+        function Toast({ message, type, show, onHide }) {
+            useEffect(() => {
+                if (show) {
+                    const timer = setTimeout(onHide, 3000);
+                    return () => clearTimeout(timer);
+                }
+            }, [show, onHide]);
+
+            return (
+                <div className={`toast ${show ? 'show' : ''} ${type === 'error' ? 'error' : ''}`}>
+                    {message}
+                </div>
+            );
+        }
+
+        // Code Editor Component
+        function CodeEditor() {
+            const [user, setUser] = useState(null);
+            const [code, setCode] = useState('');
+            const [language, setLanguage] = useState('javascript');
+            const [onlineUsers, setOnlineUsers] = useState([]);
+            const [connected, setConnected] = useState(false);
+            const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+            const [remoteCursors, setRemoteCursors] = useState({});
+            const [toast, setToast] = useState({ show: false, message: '', type: 'info' });
+            const [stats, setStats] = useState({ lines: 1, characters: 0, words: 0 });
+            
+            const textareaRef = useRef(null);
+            const highlightRef = useRef(null);
+            const socketRef = useRef(null);
+
+            // Initialize socket connection
+            useEffect(() => {
+                if (user) {
+                    socketRef.current = new MockSocket();
+                    const socket = socketRef.current;
+
+                    socket.on('connect', () => {
+                        setConnected(true);
+                        showToast('Connected to collaboration server', 'info');
+                    });
+
+                    socket.on('disconnect', () => {
+                        setConnected(false);
+                        showToast('Disconnected from server', 'error');
+                    });
+
+                    socket.on('userJoined', (userData) => {
+                        setOnlineUsers(prev => [...prev.filter(u => u.id !== userData.id), userData]);
+                        showToast(`${userData.name} joined the session`, 'info');
+                    });
+
+                    socket.on('userLeft', (userData) => {
+                        setOnlineUsers(prev => prev.filter(u => u.id !== userData.id));
+                        setRemoteCursors(prev => {
+                            const newCursors = { ...prev };
+                            delete newCursors[userData.id];
+                            return newCursors;
+                        });
+                        showToast(`${userData.name} left the session`, 'info');
+                    });
+
+                    socket.on('codeChanged', (data) => {
+                        if (data.userId !== user.uid) {
+                            setCode(data.code);
+                        }
+                    });
+
+                    socket.on('cursorMoved', (data) => {
+                        if (data.userId !== user.uid) {
+                            setRemoteCursors(prev => ({
+                                ...prev,
+                                [data.userId]: data.position
+                            }));
+                        }
+                    });
+
+                    return () => {
+                        socket.disconnect();
+                    };
+                }
+            }, [user]);
+
+            // Initialize code template
+            useEffect(() => {
+                if (codeTemplates[language]) {
+                    setCode(codeTemplates[language]);
+                }
+            }, [language]);
+
+            // Update statistics
+            useEffect(() => {
+                const lines = code.split('\n').length;
+                const characters = code.length;
+                const words = code.trim() ? code.trim().split(/\s+/).length : 0;
+                setStats({ lines, characters, words });
+            }, [code]);
+
+            const showToast = useCallback((message, type = 'info') => {
+                setToast({ show: true, message, type });
+            }, []);
+
+            const hideToast = useCallback(() => {
+                setToast(prev => ({ ...prev, show: false }));
+            }, []);
+
+            const handleCodeChange = (e) => {
+                const newCode = e.target.value;
+                setCode(newCode);
+                
+                if (socketRef.current && connected) {
+                    socketRef.current.emit('codeChange', {
+                        code: newCode,
+                        userId: user.uid,
+                        timestamp: Date.now()
+                    });
+                }
+            };
+
+            const handleCursorMove = (e) => {
+                if (socketRef.current && connected) {
+                    const cursorPosition = e.target.selectionStart;
+                    socketRef.current.emit('cursorMove', {
+                        userId: user.uid,
+                        position: cursorPosition,
+                        timestamp: Date.now()
+                    });
+                }
+            };
+
+            const handleLanguageChange = (e) => {
+                setLanguage(e.target.value);
+                showToast(`Switched to ${languages[e.target.value].name}`, 'info');
+            };
+
+            const handleScroll = (e) => {
+                if (highlightRef.current) {
+                    highlightRef.current.scrollTop = e.target.scrollTop;
+                    highlightRef.current.scrollLeft = e.target.scrollLeft;
+                }
+            };
+
+            const getHighlightedCode = () => {
+                if (window.Prism && languages[language]) {
+                    const grammar = window.Prism.languages[languages[language].grammar];
+                    if (grammar) {
+                        return window.Prism.highlight(code, grammar, languages[language].grammar);
+                    }
+                }
+                return code;
+            };
+
+            if (!user) {
+                return <LoginModal onLogin={setUser} />;
+            }
+
+            return (
+                <div className="app-container">
+                    <header className="header">
+                        <div className="logo">
+                            <span className="logo-icon">⚡</span>
+                            CodeCollab
+                        </div>
+                        <div className="header-controls">
+                            <select
+                                className="language-select"
+                                value={language}
+                                onChange={handleLanguageChange}
+                            >
+                                {Object.entries(languages).map(([key, lang]) => (
+                                    <option key={key} value={key}>{lang.name}</option>
+                                ))}
+                            </select>
+                            <div className="user-info">
+                                <div className="user-avatar">
+                                    {user.displayName.charAt(0).toUpperCase()}
+                                </div>
+                                {user.displayName}
+                            </div>
+                        </div>
+                    </header>
+
+                    <main className="main-content">
+                        <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
+                            <div className="sidebar-header">
+                                <h3 className="sidebar-title">Online Users ({onlineUsers.length + 1})</h3>
+                                <button
+                                    className="toggle-sidebar"
+                                    onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                                >
+                                    {sidebarCollapsed ? '→' : '←'}
+                                </button>
+                            </div>
+                            <div className="online-users">
+                                <ul className="user-list">
+                                    <li className="user-item active">
+                                        <div className="user-status"></div>
+                                        <div className="user-avatar">{user.displayName.charAt(0).toUpperCase()}</div>
+                                        {user.displayName} (You)
+                                        <div className="user-cursor-color" style={{background: '#58a6ff'}}></div>
+                                    </li>
+                                    {onlineUsers.map(onlineUser => (
+                                        <li key={onlineUser.id} className="user-item">
+                                            <div className="user-status"></div>
+                                            <div className="user-avatar">{onlineUser.avatar}</div>
+                                            {onlineUser.name}
+                                            <div 
+                                                className="user-cursor-color" 
+                                                style={{background: onlineUser.cursorColor}}
+                                            ></div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        </aside>
+
+                        <div className="editor-container">
+                            <div className="editor-toolbar">
+                                <input
+                                    className="file-name"
+                                    value={`main.${languages[language].ext}`}
+                                    readOnly
+                                />
+                                <div className="editor-stats">
+                                    <span>Lines: {stats.lines}</span>
+                                    <span>Words: {stats.words}</span>
+                                    <span>Characters: {stats.characters}</span>
+                                </div>
+                            </div>
+
+                            <div className="code-editor">
+                                <div 
+                                    className="syntax-highlight"
+                                    ref={highlightRef}
+                                    dangerouslySetInnerHTML={{ __html:
