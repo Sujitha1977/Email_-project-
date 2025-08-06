@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CodeSync - Real-Time Collaborative Editor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+            background: #0d1117;
+            color: #c9d1d9;
+            overflow: hidden;
+        }
+
+        .app-container {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #1f2937 0%, #374151 100%);
+            padding: 12px 20px;
+            border-bottom: 1px solid #30363d;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1.4rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #58a6ff, #79c0ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 8px 12px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+
+        .user-avatar {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #58a6ff, #79c0ff);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            color: #0d1117;
+        }
+
+        .main-content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 280px;
+            background: #161b22;
+            border-right: 1px solid #30363d;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-section {
+            padding: 15px;
+            border-bottom: 1px solid #30363d;
+        }
+
+        .sidebar-title {
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #f0f6fc;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .language-selector {
+            width: 100%;
+            padding: 8px 12px;
+            background: #21262d;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            color: #c9d1d9;
+            font-family: inherit;
+        }
+
+        .language-selector:focus {
+            outline: none;
+            border-color: #58a6ff;
+        }
+
+        .active-users {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .user-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px;
+            margin-bottom: 5px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+
+        .user-item.online {
+            border-left: 3px solid #3fb950;
+        }
+
+        .user-status {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #3fb950;
+        }
+
+        .chat-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 10px;
+            overflow-y: auto;
+            max-height: 300px;
+        }
+
+        .chat-message {
+            margin-bottom: 10px;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            font-size: 0.85rem;
+        }
+
+        .chat-input {
+            display: flex;
+            padding: 10px;
+            gap: 8px;
+        }
+
+        .chat-input input {
+            flex: 1;
+            padding: 8px 12px;
+            background: #21262d;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            color: #c9d1d9;
+            font-family: inherit;
+            font-size: 0.85rem;
+        }
+
+        .chat-input button {
+            padding: 8px 12px;
+            background: #238636;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+
+        .editor-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .editor-toolbar {
+            background: #161b22;
+            padding: 10px 15px;
+            border-bottom: 1px solid #30363d;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .toolbar-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .toolbar-button {
+            background: #21262d;
+            border: 1px solid #30363d;
+            color: #c9d1d9;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s ease;
+        }
+
+        .toolbar-button:hover {
+            background: #30363d;
+            border-color: #58a6ff;
+        }
+
+        .editor-wrapper {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .code-editor {
+            width: 100%;
+            height: 100%;
+            background: #0d1117;
+            border: none;
+            outline: none;
+            padding: 20px;
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            color: #c9d1d9;
+            resize: none;
+            tab-size: 4;
+        }
+
+        .code-output {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            padding: 20px;
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            pointer-events: none;
+            overflow: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .cursor {
+            position: absolute;
+            width: 2px;
+            height: 1.5em;
+            background: #58a6ff;
+            animation: blink 1s infinite;
+            z-index: 10;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+
+        .selection {
+            position: absolute;
+            background: rgba(88, 166, 255, 0.3);
+            z-index: 5;
+        }
+
+        .status-bar {
+            background: #161b22;
+            padding: 8px 15px;
+            border-top: 1px solid #30363d;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.8rem;
+        }
+
+        .status-left, .status-right {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .connection-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #3fb950;
+        }
+
+        .connection-dot.disconnected {
+            background: #f85149;
+        }
+
+        .login-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .login-form {
+            background: #161b22;
+            padding: 30px;
+            border-radius: 12px;
+            border: 1px solid #30363d;
+            width: 400px;
+            max-width: 90vw;
+        }
+
+        .login-form h2 {
+            margin-bottom: 20px;
+            text-align: center;
+            color: #f0f6fc;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+            color: #f0f6fc;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px 12px;
+            background: #21262d;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            color: #c9d1d9;
+            font-family: inherit;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #58a6ff;
+        }
+
+        .login-button {
+            width: 100%;
+            padding: 12px;
+            background: #238636;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+
+        .login-button:hover {
+            background: #2ea043;
+        }
+
+        .collaborative-cursors {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 15;
+        }
+
+        .remote-cursor {
+            position: absolute;
+            width: 2px;
+            height: 1.5em;
+            border-radius: 1px;
+            z-index: 20;
+        }
+
+        .remote-cursor::after {
+            content: attr(data-user);
+            position: absolute;
+            top: -25px;
+            left: -5px;
+            background: inherit;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            white-space: nowrap;
+        }
+
+        /* Syntax highlighting overrides */
+        .token.comment { color: #8b949e; }
+        .token.keyword { color: #ff7b72; }
+        .token.string { color: #a5d6ff; }
+        .token.number { color: #79c0ff; }
+        .token.function { color: #d2a8ff; }
+        .token.operator { color: #ff7b72; }
+        .token.punctuation { color: #c9d1d9; }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 250px;
+            }
+            
+            .main-content {
+                flex-direction: column;
+            }
+            
+            .sidebar {
+                width: 100%;
+                height: auto;
+                border-right: none;
+                border-bottom: 1px solid #30363d;
+            }
+            
+            .chat-section {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Login Modal -->
+        <div id="loginModal" class="login-modal">
+            <div class="login-form">
+                <h2>🚀 Join CodeSync</h2>
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" placeholder="Enter your username" required>
+                </div>
+                <div class="form-group">
+                    <label for="roomId">Room ID</label>
+                    <input type="text" id="roomId" placeholder="Enter room ID or leave empty for new room">
+                </div>
+                <button class="login-button" onclick="joinRoom()">Join Coding Session</button>
+            </div>
+        </div>
+
+        <!-- Header -->
+        <div class="header">
+            <div class="logo">
+                <span>⚡</span>
+                CodeSync
+            </div>
+            <div class="header-controls">
+                <div class="user-info">
+                    <div class="user-avatar" id="userAvatar">U</div>
+                    <span id="currentUser">Loading...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Sidebar -->
+            <div class="sidebar">
+                <!-- Language Selection -->
+                <div class="sidebar-section">
+                    <div class="sidebar-title">
+                        <span>🔧</span>
+                        Language
+                    </div>
+                    <select class="language-selector" id="languageSelect" onchange="changeLanguage()">
+                        <option value="javascript">JavaScript</option>
+                        <option value="python">Python</option>
+                        <option value="java">Java</option>
+                        <option value="cpp">C++</option>
+                        <option value="html">HTML</option>
+                        <option value="css">CSS</option>
+                        <option value="json">JSON</option>
+                        <option value="markdown">Markdown</option>
+                    </select>
+                </div>
+
+                <!-- Active Users -->
+                <div class="sidebar-section">
+                    <div class="sidebar-title">
+                        <span>👥</span>
+                        Active Users (<span id="userCount">0</span>)
+                    </div>
+                    <div class="active-users" id="activeUsers">
+                        <div class="user-item online">
+                            <div class="user-status"></div>
+                            <div class="user-avatar">Y</div>
+                            <span>You</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chat -->
+                <div class="sidebar-section chat-section">
+                    <div class="sidebar-title">
+                        <span>💬</span>
+                        Chat
+                    </div>
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="chat-message">
+                            <strong>System:</strong> Welcome to the collaborative session!
+                        </div>
+                    </div>
+                    <div class="chat-input">
+                        <input type="text" id="chatInput" placeholder="Type a message..." onkeypress="handleChatKeyPress(event)">
+                        <button onclick="sendMessage()">Send</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Editor -->
+            <div class="editor-container">
+                <!-- Toolbar -->
+                <div class="editor-toolbar">
+                    <div class="toolbar-left">
+                        <button class="toolbar-button" onclick="downloadCode()">📥 Download</button>
+                        <button class="toolbar-button" onclick="clearEditor()">🗑️ Clear</button>
+                        <button class="toolbar-button" onclick="formatCode()">✨ Format</button>
+                    </div>
+                    <div class="toolbar-right">
+                        <span style="font-size: 0.85rem; color: #8b949e;">Room: <span id="roomDisplay">-</span></span>
+                    </div>
+                </div>
+
+                <!-- Editor Area -->
+                <div class="editor-wrapper">
+                    <textarea 
+                        id="codeEditor" 
+                        class="code-editor" 
+                        placeholder="Start typing your code here... Your changes will be synchronized in real-time!"
+                        spellcheck="false"
+                        oninput="handleInput()"
+                        onselectionchange="handleSelection()"
+                        onscroll="syncScroll()"
+                    ></textarea>
+                    <div id="syntaxHighlight" class="code-output"></div>
+                    <div id="collaborativeCursors" class="collaborative-cursors"></div>
+                </div>
+
+                <!-- Status Bar -->
+                <div class="status-bar">
+                    <div class="status-left">
+                        <div class="connection-status">
+                            <div class="connection-dot" id="connectionDot"></div>
+                            <span id="connectionStatus">Connected</span>
+                        </div>
+                        <span id="documentInfo">Lines: 1 | Chars: 0</span>
+                    </div>
+                    <div class="status-right">
+                        <span id="cursorPosition">Ln 1, Col 1</span>
+                        <span id="lastSaved">Auto-saved</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let socket = null;
+        let currentUser = null;
+        let roomId = null;
+        let isConnected = false;
+        let users = {};
+        let currentLanguage = 'javascript';
+        let lastContent = '';
+        let isUpdatingFromRemote = false;
+
+        // Initialize application
+        function init() {
+            // Show login modal
+            document.getElementById('loginModal').style.display = 'flex';
+            
+            // Set initial sample code
+            setSampleCode();
+        }
+
+        function setSampleCode() {
+            const sampleCodes = {
+                javascript: `// Welcome to CodeSync - Real-time Collaborative Editor
+console.log("Hello, collaborative world!");
+
+function fibonacci(n) {
+    if (n <= 1) return n;
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+// Try editing this code - changes sync in real-time!
+const result = fibonacci(10);
+console.log(\`Fibonacci(10) = \${result}\`);`,
+                
+                python: `# Welcome to CodeSync - Real-time Collaborative Editor
+print("Hello, collaborative world!")
+
+def fibonacci(n):
+    if n <= 1:
+        return n
+    return fibonacci(n - 1) + fibonacci(n - 2)
+
+# Try editing this code - changes sync in real-time!
+result = fibonacci(10)
+print(f"Fibonacci(10) = {result}")`,
+                
+                java: `// Welcome to CodeSync - Real-time Collaborative Editor
+public class CollaborativeCode {
+    public static void main(String[] args) {
+        System.out.println("Hello, collaborative world!");
+        
+        int result = fibonacci(10);
+        System.out.println("Fibonacci(10) = " + result);
+    }
+    
+    public static int fibonacci(int n) {
+        if (n <= 1) return n;
+        return fibonacci(n - 1) + fibonacci(n - 2);
+    }
+}`,
+                
+                html: `<!DOCTYPE html>
+<!-- Welcome to CodeSync - Real-time Collaborative Editor -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Collaborative HTML</title>
+</head>
+<body>
+    <h1>Hello, collaborative world!</h1>
+    <p>This HTML is synchronized in real-time!</p>
+    
+    <script>
+        console.log("Ready for collaboration!");
+    </script>
+</body>
+</html>`
+            };
+            
+            const editor = document.getElementById('codeEditor');
+            editor.value = sampleCodes[currentLanguage] || sampleCodes.javascript;
+            updateSyntaxHighlighting();
+            updateDocumentInfo();
+        }
+
+        // Authentication and room joining
+        function joinRoom() {
+            const username = document.getElementById('username').value.trim();
+            const roomIdInput = document.getElementById('roomId').value.trim();
+            
+            if (!username) {
+                alert('Please enter a username');
+                return;
+            }
+            
+            currentUser = {
+                name: username,
+                id: generateUserId(),
+                color: generateUserColor()
+            };
+            
+            roomId = roomIdInput || generateRoomId();
+            
+            // Update UI
+            document.getElementById('currentUser').textContent = username;
+            document.getElementById('userAvatar').textContent = username.charAt(0).toUpperCase();
+            document.getElementById('userAvatar').style.background = currentUser.color;
+            document.getElementById('roomDisplay').textContent = roomId;
+            document.getElementById('loginModal').style.display = 'none';
+            
+            // Initialize Socket.io connection (simulated)
+            initializeSocket();
+        }
+
+        function generateUserId() {
+            return 'user_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        function generateRoomId() {
+            return Math.random().toString(36).substr(2, 8).toUpperCase();
+        }
+
+        function generateUserColor() {
+            const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffd93d', '#ff8b94'];
+            return colors[Math.floor(Math.random() * colors.length)];
+        }
+
+        // Socket.io simulation (in real app, this would connect to actual server)
+        function initializeSocket() {
+            // Simulate socket connection
+            isConnected = true;
+            updateConnectionStatus();
+            
+            // Simulate other users joining
+            setTimeout(() => {
+                simulateUserJoin('Alice', '#ff6b6b');
+                setTimeout(() => {
+                    simulateUserJoin('Bob', '#4ecdc4');
+                }, 2000);
+            }, 1000);
+            
+            addChatMessage('System', 'Connected to room ' + roomId);
+        }
+
+        function simulateUserJoin(name, color) {
+            const userId = generateUserId();
+            users[userId] = { name, color, id: userId };
+            updateActiveUsers();
+            addChatMessage('System', `${name} joined the session`);
+        }
+
+        // Editor functionality
+        function handleInput() {
+            if (isUpdatingFromRemote) return;
+            
+            const editor = document.getElementById('codeEditor');
+            const content = editor.value;
+            
+            updateSyntaxHighlighting();
+            updateDocumentInfo();
+            updateCursorPosition();
+            
+            // Simulate broadcasting changes to other users
+            if (content !== lastContent) {
+                broadcastChange(content);
+                lastContent = content;
+            }
+        }
+
+        function broadcastChange(content) {
+            // In real app, this would emit to socket
+            console.log('Broadcasting change:', content.length, 'characters');
+            
+            // Simulate remote cursor updates
+            setTimeout(() => {
+                updateRemoteCursors();
+            }, 100);
+        }
+
+        function updateSyntaxHighlighting() {
+            const editor = document.getElementById('codeEditor');
+            const highlightDiv = document.getElementById('syntaxHighlight');
+            const content = editor.value;
+            
+            // Simple syntax highlighting using Prism.js
+            const highlighted = Prism.highlight(content, Prism.languages[currentLanguage] || Prism.languages.javascript, currentLanguage);
+            highlightDiv.innerHTML = highlighted;
+            
+            // Sync scroll position
+            highlightDiv.scrollTop = editor.scrollTop;
+            highlightDiv.scrollLeft = editor.scrollLeft;
+        }
+
+        function syncScroll() {
+            const editor = document.getElementById('codeEditor');
+            const highlightDiv = document.getElementById('syntaxHighlight');
+            highlightDiv.scrollTop = editor.scrollTop;
+            highlightDiv.scrollLeft = editor.scrollLeft;
+        }
+
+        function handleSelection() {
+            updateCursorPosition();
+        }
+
+        function updateCursorPosition() {
+            const editor = document.getElementById('codeEditor');
+            const cursorPos = editor.selectionStart;
+            const content = editor.value;
+            
+            const lines = content.substr(0, cursorPos).split('\n');
+            const line = lines.length;
+            const col = lines[lines.length - 1].length + 1;
+            
+            document.getElementById('cursorPosition').textContent = `Ln ${line}, Col ${col}`;
+        }
+
+        function updateDocumentInfo() {
+            const editor = document.getElementById('codeEditor');
+            const content = editor.value;
+            const lines = content.split('\n').length;
+            const chars = content.length;
+            
+            document.getElementById('documentInfo').textContent = `Lines: ${lines} | Chars: ${chars}`;
+        }
+
+        function updateRemoteCursors() {
+            const cursorsDiv = document.getElementById('collaborativeCursors');
+            cursorsDiv.innerHTML = '';
+            
+            // Simulate remote cursors
+            Object.values(users).forEach((user, index) => {
+                const cursor = document.createElement('div');
+                cursor.className = 'remote-cursor';
+                cursor.style.backgroundColor = user.color;
+                cursor.style.left = (20 + index * 100) + 'px';
+                cursor.style.top = (50 + index * 30) + 'px';
+                cursor.setAttribute('data-user', user.name);
+                cursorsDiv.appendChild(cursor);
+            });
+        }
+
+        // Language switching
+        function changeLanguage() {
+            const select = document.getElementById('languageSelect');
+            currentLanguage = select.value;
+            setSampleCode();
+        }
+
+        // Toolbar functions
+        function downloadCode() {
+            const editor = document.getElementById('codeEditor');
+            const content = editor.value;
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `code.${getFileExtension(currentLanguage)}`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function getFileExtension(language) {
+            const extensions = {
+                javascript: 'js',
+                python: 'py',
+                java: 'java',
+                cpp: 'cpp',
+                html: 'html',
+                css: 'css',
+                json: 'json',
+                markdown: 'md'
+            };
+            return extensions[language] || 'txt';
+        }
+
+        function clearEditor() {
+            if (confirm('Are you sure you want to clear all code? This action cannot be undone.')) {
+                document.getElementById('codeEditor').value = '';
+                updateSyntaxHighlighting();
+                updateDocumentInfo();
+            }
+        }
+
+        function formatCode() {
+            const editor = document.getElementById('codeEditor');
+            let content = editor.value;
+            
+            // Simple formatting based on language
+            if (currentLanguage === 'javascript' || currentLanguage === 'java') {
+                content = content.replace(/;/g, ';\n').replace(/\{/g, '{\n').replace(/\}/g, '\n}');
+            } else if (currentLanguage === 'python') {
+                content = content.replace(/:/g, ':\n');
+            }
+            
+            editor.value = content;
+            updateSyntaxHighlighting();
+            addChatMessage('System', 'Code formatted');
+        }
+
+        // Chat functionality
+        function handleChatKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            
+            if (message) {
+                addChatMessage(currentUser.name, message);
+                input.value = '';
+                
+                // Simulate broadcasting to other users
+                setTimeout(() => {
+                    const responses = [
+                        'Great idea!', 'I agree', 'Let me check that', 'Working on it',
+                        'Nice code!', 'Found the bug', 'Testing now', 'Looks good'
+                    ];
+                    const users = ['Alice', 'Bob'];
+                    const randomUser = users[Math.floor(Math.random() * users.length)];
+                    const randomResponse = responses[Math.floor(Math.random() * responses.length)];
+                    addChatMessage(randomUser, randomResponse);
+                }, 1000 + Math.random() * 2000);
+            }
+        }
+
+        function addChatMessage(sender, message) {
+            const chatMessages = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'chat-message';
+            messageDiv.innerHTML = `<strong>${sender}:</strong> ${message}`;
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // User management
+        function updateActiveUsers() {
+            const activeUsersDiv = document.getElementById('activeUsers');
+            const userCount = Object.keys(users).length + 1; // +1 for current user
+            
+            document.getElementById('userCount').textContent = userCount;
+            
+            let html = `
+                <div class="user-item online">
+                    <div class="user-status"></div>
+                    <div class="user-avatar" style="background: ${currentUser.color}">
+                        ${currentUser.name.charAt(0).toUpperCase()}
+                
